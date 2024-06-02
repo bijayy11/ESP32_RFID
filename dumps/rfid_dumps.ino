@@ -1,63 +1,71 @@
-/*
- * 
- * All the resources for this project: http://randomnerdtutorials.com/
- * Modified by Rui Santos
- * 
- * Created by FILIPEFLOP
- * 
- */
- 
 #include <SPI.h>
 #include <MFRC522.h>
  
-#define SS_PIN 10
-#define RST_PIN 9
-MFRC522 mfrc522(SS_PIN, RST_PIN);   // Create MFRC522 instance.
+#define SS_PIN 21
+#define RST_PIN 22
  
-void setup() 
-{
-  Serial.begin(9600);   // Initiate a serial communication
-  SPI.begin();      // Initiate  SPI bus
-  mfrc522.PCD_Init();   // Initiate MFRC522
-  Serial.println("Approximate your card to the reader...");
-  Serial.println();
-
+MFRC522 rfid(SS_PIN, RST_PIN); 
+MFRC522::MIFARE_Key key; 
+byte nuidPICC[4];
+ 
+void setup() { 
+  Serial.begin(9600);
+  SPI.begin(); 
+  rfid.PCD_Init();
+  for (byte i = 0; i < 6; i++) {
+    key.keyByte[i] = 0xFF;
+  }
+  Serial.println(F("........................"));
+  Serial.print(F("Using the following key:"));
+  printHex(key.keyByte, MFRC522::MF_KEY_SIZE);
 }
-void loop() 
-{
-  // Look for new cards
-  if ( ! mfrc522.PICC_IsNewCardPresent()) 
-  {
+ 
+void loop() {
+  if ( ! rfid.PICC_IsNewCardPresent())
     return;
-  }
-  // Select one of the cards
-  if ( ! mfrc522.PICC_ReadCardSerial()) 
-  {
+  if ( ! rfid.PICC_ReadCardSerial())
     return;
-  }
-  //Show UID on serial monitor
-  Serial.print("UID tag :");
-  String content= "";
-  byte letter;
-  for (byte i = 0; i < mfrc522.uid.size; i++) 
-  {
-     Serial.print(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " ");
-     Serial.print(mfrc522.uid.uidByte[i], HEX);
-     content.concat(String(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " "));
-     content.concat(String(mfrc522.uid.uidByte[i], HEX));
-  }
-  Serial.println();
-  Serial.print("Message : ");
-  content.toUpperCase();
-  if (content.substring(1) == "BD 31 15 2B") //change here the UID of the card/cards that you want to give access
-  {
-    Serial.println("Authorized access");
-    Serial.println();
-    delay(3000);
+ 
+  Serial.print(F("PICC type: "));
+  MFRC522::PICC_Type piccType = rfid.PICC_GetType(rfid.uid.sak);
+  Serial.println(rfid.PICC_GetTypeName(piccType));
+  if (piccType != MFRC522::PICC_TYPE_MIFARE_MINI && 
+    piccType != MFRC522::PICC_TYPE_MIFARE_1K &&
+    piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
+    Serial.println(F("Your tag is not of type MIFARE Classic."));
+    return;
   }
  
- else   {
-    Serial.println(" Access denied");
-    delay(3000);
+  if (rfid.uid.uidByte[0] != nuidPICC[0] || 
+    rfid.uid.uidByte[1] != nuidPICC[1] || 
+    rfid.uid.uidByte[2] != nuidPICC[2] || 
+    rfid.uid.uidByte[3] != nuidPICC[3] ) {
+    Serial.println(F("A new card has been detected."));
+ 
+    for (byte i = 0; i < 4; i++) {
+      nuidPICC[i] = rfid.uid.uidByte[i];
+    }
+    Serial.println(F("The NUID tag is:"));
+    Serial.print(F("In hex: "));
+    printHex(rfid.uid.uidByte, rfid.uid.size);
+    Serial.println();
+    Serial.print(F("In dec: "));
+    printDec(rfid.uid.uidByte, rfid.uid.size);
+    Serial.println();
   }
-} 
+  else Serial.println(F("Card read previously."));
+  rfid.PICC_HaltA();
+  rfid.PCD_StopCrypto1();
+}
+void printHex(byte *buffer, byte bufferSize) {
+  for (byte i = 0; i < bufferSize; i++) {
+    Serial.print(buffer[i] < 0x10 ? " 0" : " ");
+    Serial.print(buffer[i], HEX);
+  }
+}
+void printDec(byte *buffer, byte bufferSize) {
+  for (byte i = 0; i < bufferSize; i++) {
+    Serial.print(buffer[i] < 0x10 ? " 0" : " ");
+    Serial.print(buffer[i], DEC);
+  }
+}
